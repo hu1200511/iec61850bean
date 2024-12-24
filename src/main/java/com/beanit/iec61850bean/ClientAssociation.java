@@ -117,6 +117,9 @@ public final class ClientAssociation {
 
   private boolean closed = false;
 
+  // maximum read quantity at once batch read
+  private int maxNodeSize = 1000;
+
   ClientAssociation(
       InetAddress address,
       int port,
@@ -807,6 +810,84 @@ public final class ClientAssociation {
     ConfirmedServiceRequest serviceRequest = constructGetDataValuesRequest(modelNode);
     ConfirmedServiceResponse confirmedServiceResponse = encodeWriteReadDecode(serviceRequest);
     decodeGetDataValuesResponse(confirmedServiceResponse, modelNode);
+  }
+
+  /**
+   * read batch data values.
+   *
+   * @param nodeList the functionally constrained model node that is to be read.
+   * @return the map of nodes that could not be read or failed. key - ModelNode; value - ErrorMessage
+   * @throws ServiceError
+   * @throws IOException
+   */
+  public Map<FcModelNode, String> getDataValueList(List<FcModelNode> nodeList) throws ServiceError, IOException {
+    Map<FcModelNode, String> errorNodes = new HashMap<>();
+    if (nodeList.size() > maxNodeSize) {
+      for (int i = 0; i < nodeList.size(); i += maxNodeSize) {
+        errorNodes.putAll(doBatchRead(nodeList.subList(i, Math.min(i + maxNodeSize, nodeList.size()))));
+      }
+    } else {
+      errorNodes.putAll(doBatchRead(nodeList));
+    }
+    return errorNodes;
+  }
+
+  public Map<FcModelNode, String> doBatchRead(List<FcModelNode> nodeList) throws ServiceError, IOException {
+    ConfirmedServiceRequest serviceRequest = constructGetDataValueListRequest(nodeList);
+    ConfirmedServiceResponse confirmedServiceResponse = encodeWriteReadDecode(serviceRequest);
+    return decodeGetDataValueListResponse(confirmedServiceResponse, nodeList);
+  }
+
+  private ConfirmedServiceRequest constructGetDataValueListRequest(List<FcModelNode> nodeList) {
+    VariableAccessSpecification varAccessSpec = constructVariableAccessSpecification(nodeList);
+
+    ReadRequest readRequest = new ReadRequest();
+    readRequest.setVariableAccessSpecification(varAccessSpec);
+
+    ConfirmedServiceRequest confirmedServiceRequest = new ConfirmedServiceRequest();
+    confirmedServiceRequest.setRead(readRequest);
+
+    return confirmedServiceRequest;
+  }
+
+  /**
+   * @param confirmedServiceResponse response from the server
+   * @param nodeList                 list of nodes to read
+   * @return the set of nodes that have failed
+   * @throws ServiceError
+   */
+  private Map<FcModelNode, String> decodeGetDataValueListResponse(
+          ConfirmedServiceResponse confirmedServiceResponse, List<FcModelNode> nodeList) throws ServiceError {
+
+    if (confirmedServiceResponse.getRead() == null) {
+      throw new ServiceError(
+              ServiceError.FAILED_DUE_TO_COMMUNICATIONS_CONSTRAINT,
+              "Error decoding GetDataValuesReponsePdu");
+    }
+
+    List<AccessResult> listOfAccessResults =
+            confirmedServiceResponse.getRead().getListOfAccessResult().getAccessResult();
+
+    if (listOfAccessResults.size() != nodeList.size()) {
+      throw new ServiceError(
+              ServiceError.PARAMETER_VALUE_INAPPROPRIATE, "Number of results does not match.");
+    }
+    Map<FcModelNode, String> errorNode = new HashMap<>();
+
+    for (int i = 0; i < listOfAccessResults.size(); i++) {
+      AccessResult accRes = listOfAccessResults.get(i);
+
+      if (accRes.getFailure() != null) {
+        errorNode.put(nodeList.get(i), mmsDataAccessErrorToServiceError(accRes.getFailure()).getMessage());
+      } else {
+        try {
+          nodeList.get(i).setValueFromMmsDataObj(accRes.getSuccess());
+        } catch (ServiceError e) {
+          errorNode.put(nodeList.get(i), e.getMessage());
+        }
+      }
+    }
+    return errorNode;
   }
 
   private boolean decodeGetFileDirectoryResponse(
