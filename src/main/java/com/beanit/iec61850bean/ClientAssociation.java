@@ -1239,6 +1239,20 @@ public final class ClientAssociation {
     return variableAccessSpecification;
   }
 
+  private VariableAccessSpecification constructVariableAccessSpecification(List<FcModelNode> nodeList) {
+        VariableDefs listOfVariable = new VariableDefs();
+
+        List<VariableDefs.SEQUENCE> variableDefsSeqOf = listOfVariable.getSEQUENCE();
+        for (FcModelNode modelNodes : nodeList) {
+            variableDefsSeqOf.add(modelNodes.getMmsVariableDef());
+        }
+
+        VariableAccessSpecification variableAccessSpecification = new VariableAccessSpecification();
+        variableAccessSpecification.setListOfVariable(listOfVariable);
+
+        return variableAccessSpecification;
+    }
+
   private void decodeSetDataValuesResponse(ConfirmedServiceResponse confirmedServiceResponse)
       throws ServiceError {
 
