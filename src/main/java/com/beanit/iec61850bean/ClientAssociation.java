@@ -828,7 +828,7 @@ public final class ClientAssociation {
     return errorNodes;
   }
 
-  public Map<FcModelNode, String> doBatchRead(List<FcModelNode> nodeList) throws ServiceError, IOException {
+  private Map<FcModelNode, String> doBatchRead(List<FcModelNode> nodeList) throws ServiceError, IOException {
     ConfirmedServiceRequest serviceRequest = constructGetDataValueListRequest(nodeList);
     ConfirmedServiceResponse confirmedServiceResponse = encodeWriteReadDecode(serviceRequest);
     return decodeGetDataValueListResponse(confirmedServiceResponse, nodeList);
